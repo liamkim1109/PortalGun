@@ -10,6 +10,7 @@ public class PortalTraveller : MonoBehaviour
 
     private Rigidbody body;
     private CapsuleCollider capsule;
+    private PlayerController playerController;
     private float lastTeleportTime = float.NegativeInfinity;
     private Portal lastExitPortal;
     private Vector3 velocityBeforePhysics;
@@ -19,6 +20,7 @@ public class PortalTraveller : MonoBehaviour
     {
         body = GetComponent<Rigidbody>();
         capsule = GetComponent<CapsuleCollider>();
+        playerController = GetComponent<PlayerController>();
     }
 
     // Called by PlayerController immediately before Unity simulates the next step.
@@ -104,15 +106,14 @@ public class PortalTraveller : MonoBehaviour
             -Vector3.Dot(incomingVelocity, entry.transform.forward) * Mathf.Sign(signedDistance)
         );
         Vector3 mappedVelocity = exit.transform.forward * inwardSpeed;
-        PlayerController controller = GetComponent<PlayerController>();
-        float speedLimit = controller != null ? controller.MaxLinearSpeed : body.maxLinearVelocity;
+        float speedLimit = playerController != null ? playerController.MaxLinearSpeed : body.maxLinearVelocity;
         if (mappedVelocity.sqrMagnitude > speedLimit * speedLimit)
             mappedVelocity = mappedVelocity.normalized * speedLimit;
 
         Vector3 mappedAngularVelocity = rotationMap * body.angularVelocity;
         Quaternion mappedRotation = rotationMap * body.rotation;
-        Quaternion uprightRotation = controller != null && controller.CameraTransform != null
-            ? controller.AlignAfterPortal(rotationMap * controller.CameraTransform.rotation, mappedRotation)
+        Quaternion uprightRotation = playerController != null && playerController.CameraTransform != null
+            ? playerController.AlignAfterPortal(rotationMap * playerController.CameraTransform.rotation, mappedRotation)
             : GetUprightRotation(mappedRotation, exit.transform);
 
         body.position = exitPosition;
@@ -125,7 +126,7 @@ public class PortalTraveller : MonoBehaviour
 
     private bool StillOverlappingPortal(Portal portal)
     {
-        BoxCollider portalBounds = portal.GetComponent<BoxCollider>();
+        BoxCollider portalBounds = portal.BoundsCollider;
         if (portalBounds == null)
             return false;
 
@@ -151,7 +152,7 @@ public class PortalTraveller : MonoBehaviour
 
     private bool FitsThroughOpening(Portal portal)
     {
-        BoxCollider portalBounds = portal.GetComponent<BoxCollider>();
+        BoxCollider portalBounds = portal.BoundsCollider;
         if (portalBounds == null)
             return false;
 

@@ -3,6 +3,7 @@ using UnityEngine;
 public class Portal : MonoBehaviour
 {
     private const int PortalViewLayer = 31;
+    private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
 
     public PortalType Type { get; private set; }
     public Portal LinkedPortal { get; private set; }
@@ -14,10 +15,19 @@ public class Portal : MonoBehaviour
     private GameObject viewSurface;
     private Renderer viewSurfaceRenderer;
     private Renderer[] destinationRenderers = new Renderer[0];
-    private bool[] destinationRendererStates = new bool[0];
+    private bool[][] destinationRendererStatesByLevel = new bool[0][];
     private Camera[] recursionCameras = new Camera[0];
     private RenderTexture[] recursionTextures = new RenderTexture[0];
+    private readonly Plane[] cameraFrustumPlanes = new Plane[6];
+    private BoxCollider portalBounds;
     private int recursionLimit = 1;
+
+    public BoxCollider BoundsCollider => portalBounds;
+
+    private void Awake()
+    {
+        portalBounds = GetComponent<BoxCollider>();
+    }
 
     public void Initialize(PortalType type, Color color)
     {
@@ -63,7 +73,9 @@ public class Portal : MonoBehaviour
             destinationRenderers = other != null
                 ? other.GetComponentsInChildren<Renderer>(true)
                 : new Renderer[0];
-            destinationRendererStates = new bool[destinationRenderers.Length];
+            destinationRendererStatesByLevel = new bool[recursionLimit][];
+            for (int i = 0; i < recursionLimit; i++)
+                destinationRendererStatesByLevel[i] = new bool[destinationRenderers.Length];
         }
         if (viewCamera != null)
             viewCamera.enabled = false;
@@ -105,8 +117,7 @@ public class Portal : MonoBehaviour
         if (shader != null)
         {
             viewMaterial = new Material(shader);
-            if (viewMaterial.HasProperty("_BaseMap"))
-                viewMaterial.SetTexture("_BaseMap", viewTexture);
+            viewMaterial.SetTexture(BaseMapId, viewTexture);
             if (viewMaterial.HasProperty("_BaseColor"))
                 viewMaterial.SetColor("_BaseColor", Color.white);
             if (viewMaterial.HasProperty("_ApertureAspect"))
@@ -125,8 +136,8 @@ public class Portal : MonoBehaviour
         viewCamera = cameraObject.AddComponent<Camera>();
         viewCamera.enabled = false;
         viewCamera.targetTexture = viewTexture;
-        viewCamera.allowHDR = true;
-        viewCamera.allowMSAA = true;
+        viewCamera.allowHDR = false;
+        viewCamera.allowMSAA = false;
         viewCamera.cullingMask = sourceCamera != null
             ? sourceCamera.cullingMask & ~(1 << PortalViewLayer)
             : ~(1 << PortalViewLayer);
@@ -138,9 +149,12 @@ public class Portal : MonoBehaviour
 
         for (int i = 1; i < recursionLimit; i++)
         {
+            // Deeper views occupy a smaller portion of the final image. Lower
+            // their resolution at each step to reduce memory and render cost.
+            int divisor = 1 << Mathf.Min(i, 4);
             RenderTexture texture = new RenderTexture(
-                viewTexture.width,
-                viewTexture.height,
+                Mathf.Max(128, viewTexture.width / divisor),
+                Mathf.Max(128, viewTexture.height / divisor),
                 24,
                 RenderTextureFormat.ARGB32
             )
@@ -157,8 +171,8 @@ public class Portal : MonoBehaviour
             Camera nestedCamera = nestedCameraObject.AddComponent<Camera>();
             nestedCamera.enabled = false;
             nestedCamera.targetTexture = texture;
-            nestedCamera.allowHDR = true;
-            nestedCamera.allowMSAA = true;
+            nestedCamera.allowHDR = false;
+            nestedCamera.allowMSAA = false;
             recursionCameras[i] = nestedCamera;
         }
 
@@ -177,13 +191,10 @@ public class Portal : MonoBehaviour
 
         // Portal openings are one-sided: never show the remote view from behind
         // the surface, where the wall should occlude it.
-        bool cameraOnFrontSide = Vector3.Dot(
-            sourceCamera.transform.position - transform.position,
-            transform.forward
-        ) > 0.02f;
+        bool cameraOnFrontSide = IsOnFrontSide(sourceCamera);
         if (viewSurfaceRenderer != null)
             viewSurfaceRenderer.enabled = LinkedPortal != null && cameraOnFrontSide;
-        if (!cameraOnFrontSide)
+        if (!cameraOnFrontSide || !IsInsideCameraFrustum(sourceCamera))
             return;
 
         RenderRecursiveView(sourceCamera, 0, recursionLimit);
@@ -198,20 +209,21 @@ public class Portal : MonoBehaviour
         if (!ConfigurePortalCamera(camera, source))
             return null;
 
-        Texture previousTexture = viewMaterial != null && viewMaterial.HasProperty("_BaseMap")
-            ? viewMaterial.GetTexture("_BaseMap")
+        Texture previousTexture = viewMaterial != null
+            ? viewMaterial.GetTexture(BaseMapId)
             : null;
+        bool[] rendererStates = destinationRendererStatesByLevel[level];
         bool ownSurfaceWasEnabled = viewSurfaceRenderer != null && viewSurfaceRenderer.enabled;
         bool destinationSurfaceWasEnabled = LinkedPortal.viewSurfaceRenderer != null
             && LinkedPortal.viewSurfaceRenderer.enabled;
 
         try
         {
-            if (levelsRemaining > 1)
+            if (levelsRemaining > 1 && IsOnFrontSide(camera) && IsInsideCameraFrustum(camera))
             {
                 RenderTexture nestedTexture = RenderRecursiveView(camera, level + 1, levelsRemaining - 1);
                 if (viewMaterial != null && nestedTexture != null)
-                    viewMaterial.SetTexture("_BaseMap", nestedTexture);
+                    viewMaterial.SetTexture(BaseMapId, nestedTexture);
                 if (viewSurfaceRenderer != null)
                     viewSurfaceRenderer.enabled = nestedTexture != null;
             }
@@ -232,7 +244,7 @@ public class Portal : MonoBehaviour
                 Renderer targetRenderer = destinationRenderers[i];
                 if (targetRenderer == null)
                     continue;
-                destinationRendererStates[i] = targetRenderer.enabled;
+                rendererStates[i] = targetRenderer.enabled;
                 if (targetRenderer.gameObject.layer != PortalViewLayer)
                     targetRenderer.enabled = false;
             }
@@ -244,15 +256,15 @@ public class Portal : MonoBehaviour
             for (int i = 0; i < destinationRenderers.Length; i++)
             {
                 if (destinationRenderers[i] != null)
-                    destinationRenderers[i].enabled = destinationRendererStates[i];
+                    destinationRenderers[i].enabled = rendererStates[i];
             }
 
             if (LinkedPortal != null && LinkedPortal.viewSurfaceRenderer != null)
                 LinkedPortal.viewSurfaceRenderer.enabled = destinationSurfaceWasEnabled;
             if (viewSurfaceRenderer != null)
                 viewSurfaceRenderer.enabled = ownSurfaceWasEnabled;
-            if (viewMaterial != null && viewMaterial.HasProperty("_BaseMap"))
-                viewMaterial.SetTexture("_BaseMap", previousTexture);
+            if (viewMaterial != null)
+                viewMaterial.SetTexture(BaseMapId, previousTexture);
         }
 
         return recursionTextures[level];
@@ -271,12 +283,12 @@ public class Portal : MonoBehaviour
 
         // Bound this render to the destination aperture, not the source camera's
         // full field of view.
-        BoxCollider portalBounds = LinkedPortal.GetComponent<BoxCollider>();
-        if (portalBounds == null)
+        BoxCollider destinationBounds = LinkedPortal.portalBounds;
+        if (destinationBounds == null)
             return false;
 
-        float halfWidth = portalBounds.size.x * 0.45f;
-        float halfHeight = portalBounds.size.y * 0.47f;
+        float halfWidth = destinationBounds.size.x * 0.45f;
+        float halfHeight = destinationBounds.size.y * 0.47f;
         Vector3 lowerLeft = LinkedPortal.transform.TransformPoint(new Vector3(-halfWidth, -halfHeight, 0f));
         Vector3 lowerRight = LinkedPortal.transform.TransformPoint(new Vector3(halfWidth, -halfHeight, 0f));
         Vector3 upperLeft = LinkedPortal.transform.TransformPoint(new Vector3(-halfWidth, halfHeight, 0f));
@@ -298,6 +310,20 @@ public class Portal : MonoBehaviour
         camera.ResetProjectionMatrix();
         camera.projectionMatrix = PerspectiveOffCenter(left, right, bottom, top, near, far);
         return true;
+    }
+
+    private bool IsOnFrontSide(Camera camera)
+    {
+        return Vector3.Dot(camera.transform.position - transform.position, transform.forward) > 0.02f;
+    }
+
+    private bool IsInsideCameraFrustum(Camera camera)
+    {
+        if (viewSurfaceRenderer == null)
+            return false;
+
+        GeometryUtility.CalculateFrustumPlanes(camera, cameraFrustumPlanes);
+        return GeometryUtility.TestPlanesAABB(cameraFrustumPlanes, viewSurfaceRenderer.bounds);
     }
 
     private Matrix4x4 PerspectiveOffCenter(float left, float right, float bottom, float top, float near, float far)

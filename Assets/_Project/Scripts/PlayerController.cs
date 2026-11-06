@@ -86,6 +86,12 @@ public class PlayerController : MonoBehaviour
             jumpRequested = true;
     }
 
+    private void Start()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
     private void FixedUpdate()
     {
         bool grounded = IsGrounded();

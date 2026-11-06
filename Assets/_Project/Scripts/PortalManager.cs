@@ -7,7 +7,8 @@ public class PortalManager : MonoBehaviour
     [SerializeField] private float surfaceClearance = 0.02f;
     [SerializeField] private float overlapPadding = 0.06f;
     [SerializeField] private int edgeSamples = 16;
-    [SerializeField, Range(1, 5)] private int maxPortalRecursion = 5;
+    [SerializeField, Range(1, 5), Tooltip("Maximum nested portal views rendered per portal.")]
+    private int maxPortalRecursion = 5;
 
     private Portal redPortal;
     private Portal bluePortal;
