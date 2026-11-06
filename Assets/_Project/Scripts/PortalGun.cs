@@ -46,26 +46,15 @@ public class PortalGun : MonoBehaviour
             return;
         }
 
-        Color color = type == PortalType.Red
-            ? new Color(1f, 0.36f, 0.02f)
-            : new Color(0.04f, 0.25f, 1f);
+        Color color = type == PortalType.Red ? new Color(1f, 0.36f, 0.02f) : new Color(0.04f, 0.25f, 1f);
 
         GameObject projectileObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         projectileObject.name = $"{type} Portal Projectile";
         projectileObject.transform.localScale = Vector3.one * (projectileRadius * 2f);
-        projectileObject.transform.position = playerCamera.transform.position
-            + playerCamera.transform.forward * (projectileRadius + 0.15f);
+        projectileObject.transform.position = playerCamera.transform.position + playerCamera.transform.forward * (projectileRadius + 0.15f);
 
         projectileObject.AddComponent<Rigidbody>();
         PortalProjectile projectile = projectileObject.AddComponent<PortalProjectile>();
-        projectile.Initialize(
-            portalManager,
-            type,
-            transform,
-            playerCamera.transform.forward,
-            playerCamera.transform.up,
-            projectileSpeed,
-            color
-        );
+        projectile.Initialize(portalManager, type, transform, playerCamera.transform.forward, playerCamera.transform.up, projectileSpeed, color);
     }
 }

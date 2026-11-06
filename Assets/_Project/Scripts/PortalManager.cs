@@ -215,15 +215,7 @@ public class PortalManager : MonoBehaviour
                 + up * (Mathf.Sin(angle) * halfSize.y * 0.97f);
             Vector3 rayOrigin = edgePoint + normal * startOffset;
 
-            if (!Physics.Raycast(
-                    rayOrigin,
-                    -normal,
-                    out RaycastHit hit,
-                    rayLength,
-                    ~0,
-                    QueryTriggerInteraction.Ignore)
-                || hit.collider != surface
-                || Vector3.Dot(hit.normal, normal) < 0.9f)
+            if (!Physics.Raycast(rayOrigin, -normal, out RaycastHit hit, rayLength, ~0, QueryTriggerInteraction.Ignore) || hit.collider != surface || Vector3.Dot(hit.normal, normal) < 0.9f)
             {
                 return false;
             }

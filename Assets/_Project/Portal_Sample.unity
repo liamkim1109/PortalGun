@@ -1365,7 +1365,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f83cbb7eeadd49c693865aef72f28f6d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PortalGun
-  playerCamera: {fileID: 0}
+  playerCamera: {fileID: 779671809}
   projectileSpeed: 35
   projectileRadius: 0.12
 --- !u!114 &1800889761

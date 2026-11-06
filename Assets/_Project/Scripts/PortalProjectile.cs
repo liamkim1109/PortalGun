@@ -71,22 +71,13 @@ public class PortalProjectile : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (hasHit)
-            return;
-
+        if (hasHit) return;
         hasHit = true;
 
         if (portalManager != null && collision.contactCount > 0)
         {
             ContactPoint contact = collision.GetContact(0);
-            portalManager.PlacePortal(
-                portalType,
-                contact.point,
-                contact.normal,
-                shotDirection,
-                playerUp,
-                collision.collider
-            );
+            portalManager.PlacePortal(portalType, contact.point, contact.normal, shotDirection, playerUp, collision.collider);
         }
 
         Destroy(gameObject);
